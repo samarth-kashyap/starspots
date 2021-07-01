@@ -71,9 +71,6 @@ class Spot():
         self.spot_area_list = None
         self.time_list = None
 
-
-
-
     def evolve(self, max_spot_area):
         """Evolves a starspot based on the growth and decay factors.
 
@@ -99,7 +96,7 @@ class Spot():
         spot_area_list = []
         time_list = []
 
-        spot_area = 1e-6
+        spot_area = 1e-4 * max_spot_area
         time = 0.0
         time_step_days = self.time_step * year2day
         # growth loop
@@ -154,7 +151,18 @@ class Spot():
             List containing area of spot as a function of time for 
             each time_step.
         """
+        if self.isevolved:
+            return self.spot_area_list
+
         self.lifetime = self.get_lifetime(max_spot_area) * year2day
+
+        latitude_list = []
+        longitude_list = []
+        spot_area_list = []
+        time_list = []
+
+        time = 0.0
+        time_step_days = self.time_step * year2day
 
         # decay loop
         spot_area = max_spot_area*1.0
@@ -165,7 +173,13 @@ class Spot():
             d_area = (np.exp(gamma1) * spot_area**gamma2)/cad
             spot_area -= d_area
             if spot_area < 0: break
+            self.latitude = self.latitude
+            self.longitude = self.longitude + self.get_rotation(equator_rot_rate)*time_step
+            time += time_step_days
+            latitude_list.append(self.latitude)
+            longitude_list.append(self.longitude)
             spot_area_list.append(spot_area)
+            time_list.append(time)
 
         tg = self.lifetime - len(spot_area_list)/cad
 
@@ -177,7 +191,20 @@ class Spot():
             d_area = (np.exp(gamma1) * spot_area**gamma2)/cad
             spot_area -= d_area
             if spot_area < 0: break
+
+            self.latitude = self.latitude
+            self.longitude = self.longitude + self.get_rotation(equator_rot_rate)*time_step
+            time -= time_step_days
+            latitude_list.insert(0, self.latitude)
+            longitude_list.insert(0, self.longitude)
             spot_area_list.insert(0, spot_area)
+            time_list.insert(0, time)
+
+        self.isevolved = True
+        self.latitude_list = latitude_list
+        self.longitude_list = longitude_list
+        self.spot_area_list = spot_area_list
+        self.time_list = time_list
         return spot_area_list
 
     def get_lifetime(self, max_spot_area):
@@ -251,9 +278,9 @@ class Star():
         spot_dict = {}
         spot_id = 0
         for time in np.arange(self.initial_time, self.initial_time+total_time, time_step):
-            Nm = self.nspots(time)
-            # num_spots = np.random.poisson(0.0006)
-            num_spots = np.random.poisson(Nm)
+            # Nm = self.nspots(time)
+            num_spots = np.random.poisson(0.0006)
+            # num_spots = np.random.poisson(Nm)
             longitudes = np.random.uniform(0, 2*np.pi, num_spots)
             latitudes = np.random.normal(self.latitude_mean, self.latitude_sigma, num_spots)
             if num_spots < 0: continue
@@ -262,13 +289,13 @@ class Star():
                 spot = Spot(latitude=latitudes[idx],
                             longitude=longitudes[idx],
                             spot_id=spot_id)
-                spot.evolve(1e4)
+                spot.evolve(1e1)
                 spot_dict[f'{spot_id}'] = {}
                 spot_dict[f'{spot_id}']['time'] = spot.time_list + time
                 spot_dict[f'{spot_id}']['area'] = np.array(spot.spot_area_list)
                 spot_dict[f'{spot_id}']['latitude'] = np.array(spot.latitude_list)
                 spot_dict[f'{spot_id}']['longitude'] = np.array(spot.longitude_list)
-            if spot_id % 100 == 0: print(f'spot_id = {spot_id}')
+            # if spot_id % 100 == 0: print(f'spot_id = {spot_id}')
         self.spot_dict = spot_dict
 
     def spot_counter(self):
