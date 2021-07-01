@@ -8,7 +8,7 @@ year2day = 365.25
 day2hour = 24
 rsun = 6.955e10
 cycle_length = 11.            # years
-total_time = 4.               # years
+total_time = 1.               # years
 time_step = total_time/year2day/day2hour
 cad = (1/year2day)/time_step
 gw_constant = 10.
@@ -17,7 +17,7 @@ gw_corr_coeffs = [5., 6.2591e-3]
 wr = np.array([14.713, -2.396, -1.787])
 alpha = 0.2
 
-equator_rot_rate = 2*np.pi/25. # ?? what is this?
+equator_rot_rate = 2*np.pi/25.
 const = Oeq*alpha*np.sin(np.radians(90.))**2
 wr2 = [alpha, equator_rot_rate*year2day]
 
@@ -32,10 +32,14 @@ class Spot():
                       "area_logn", "evolution_coeffs",
                       "mean_latitude_coeffs", "sigmaL_coeffs"]
 
-    def __init__(self, latitude=90., longitude=45., spot_id=0):
+    def __init__(self,
+                 latitude=np.radians(90.),
+                 longitude=np.radians(45.),
+                 spot_id=0, no_evolution=False,
+                 len_time=None):
         self.time_step = time_step
-        self.latitude = np.radians(latitude)
-        self.longitude = np.radians(longitude)
+        self.latitude = latitude
+        self.longitude = longitude
         self.spot_id = int(spot_id)
 
         area_logn = {}
@@ -70,6 +74,8 @@ class Spot():
         self.longitude_list = None
         self.spot_area_list = None
         self.time_list = None
+        self.no_evolution = no_evolution
+        self.len_time = len_time
 
     def evolve(self, max_spot_area):
         """Evolves a starspot based on the growth and decay factors.
@@ -87,6 +93,10 @@ class Spot():
             each time_step.
         """
         if self.isevolved:
+            return self.spot_area_list
+
+        if self.no_evolution:
+            longitude_list = self.rotate_nonevolving_spots(max_spot_area)
             return self.spot_area_list
 
         self.lifetime = self.get_lifetime(max_spot_area) * year2day
@@ -107,7 +117,8 @@ class Spot():
             spot_area += d_area
             if spot_area > max_spot_area: break
             self.latitude = self.latitude
-            self.longitude = self.longitude + self.get_rotation(equator_rot_rate)*time_step
+            self.longitude = (self.longitude +
+                              self.get_rotation(equator_rot_rate)*time_step) % (2*np.pi)
             time += time_step_days
             latitude_list.append(self.latitude)
             longitude_list.append(self.longitude)
@@ -122,7 +133,8 @@ class Spot():
             spot_area -= d_area
             if spot_area < 0: break
             self.latitude = self.latitude
-            self.longitude = self.longitude + self.get_rotation(equator_rot_rate)*time_step
+            self.longitude = (self.longitude +
+                              self.get_rotation(equator_rot_rate)*time_step) % (2*np.pi)
             time += time_step_days
             latitude_list.append(self.latitude)
             longitude_list.append(self.longitude)
@@ -174,7 +186,8 @@ class Spot():
             spot_area -= d_area
             if spot_area < 0: break
             self.latitude = self.latitude
-            self.longitude = self.longitude + self.get_rotation(equator_rot_rate)*time_step
+            self.longitude = (self.longitude +
+                              self.get_rotation(equator_rot_rate)*time_step) % (2*np.pi)
             time += time_step_days
             latitude_list.append(self.latitude)
             longitude_list.append(self.longitude)
@@ -193,7 +206,8 @@ class Spot():
             if spot_area < 0: break
 
             self.latitude = self.latitude
-            self.longitude = self.longitude + self.get_rotation(equator_rot_rate)*time_step
+            self.longitude = (self.longitude +
+                              self.get_rotation(equator_rot_rate)*time_step) % (2*np.pi)
             time -= time_step_days
             latitude_list.insert(0, self.latitude)
             longitude_list.insert(0, self.longitude)
@@ -206,6 +220,36 @@ class Spot():
         self.spot_area_list = spot_area_list
         self.time_list = time_list
         return spot_area_list
+
+
+    def rotate_nonevolving_spots(self, max_spot_area):
+        """Rotates the non-evolving spots using the provided
+        differentially rotating profile of the star.
+
+        """
+        if self.isevolved:
+            return self.spot_area_list
+
+        latitude_list = []
+        longitude_list = []
+        spot_area_list = []
+        time_list = []
+
+        for idx in range(self.len_time):
+            self.longitude = (self.longitude +
+                              self.get_rotation(equator_rot_rate)*time_step) % (2*np.pi)
+            time_list.append(idx*time_step)
+            longitude_list.append(self.longitude)
+            latitude_list.append(self.latitude)
+            spot_area_list.append(max_spot_area)
+
+        self.isevolved = True
+        self.latitude_list = latitude_list
+        self.longitude_list = longitude_list
+        self.spot_area_list = spot_area_list
+        self.time_list = time_list
+
+        return longitude_list
 
     def get_lifetime(self, max_spot_area):
         """Computes the lifetime of starspots based on the 
@@ -244,8 +288,7 @@ class Spot():
         -------
         Rotation rate at the starspot latitude
         """
-        return equator_rot_rate*(1. - wr2[0]*np.sin(self.latitude)**2)
-
+        return equator_rot_rate*(1. - wr2[0]*np.sin(self.latitude)**2)*year2day
 
 
 class Star():
@@ -262,10 +305,14 @@ class Star():
     latitude_mean = np.radians(15.)
     latitude_sigma = np.radians(5.)
 
-    def __init__(self, inclination=70.):
+    def __init__(self, inclination=70., no_evolution=False):
         self.inclination = np.radians(inclination)
         self.spot_count = 0
         self.spot_dict = None
+        self.no_evolution = no_evolution
+
+        # Setting fixed number of non-evolving spots
+        self.num_spots = 2 if self.no_evolution else None
 
         sunspotnum_coeffs = {}
         sunspotnum_coeffs['a1'] = 0.26301229/6.
@@ -273,30 +320,51 @@ class Star():
         sunspotnum_coeffs['b1'] = 4.7786238
         sunspotnum_coeffs['c1'] = -0.2908343
         self.sunspotnum_coeffs = sunspotnum_coeffs
+        self.max_spot_area = 1e1
 
     def simulate_spots(self):
         spot_dict = {}
         spot_id = 0
-        for time in np.arange(self.initial_time, self.initial_time+total_time, time_step):
-            # Nm = self.nspots(time)
-            num_spots = np.random.poisson(0.0006)
-            # num_spots = np.random.poisson(Nm)
-            longitudes = np.random.uniform(0, 2*np.pi, num_spots)
-            latitudes = np.random.normal(self.latitude_mean, self.latitude_sigma, num_spots)
-            if num_spots < 0: continue
-            for idx in range(num_spots):
+        time_arr = np.arange(self.initial_time, self.initial_time+total_time, time_step)
+
+        if self.no_evolution:
+            longitudes = np.random.uniform(0, 2*np.pi, self.num_spots)
+            latitudes = np.random.normal(self.latitude_mean, self.latitude_sigma, self.num_spots)
+            for idx in range(self.num_spots):
                 spot_id = self.spot_counter()
                 spot = Spot(latitude=latitudes[idx],
                             longitude=longitudes[idx],
-                            spot_id=spot_id)
-                spot.evolve(1e1)
+                            spot_id=spot_id,
+                            no_evolution=True,
+                            len_time=len(time_arr))
+                spot.evolve(self.max_spot_area)
                 spot_dict[f'{spot_id}'] = {}
-                spot_dict[f'{spot_id}']['time'] = spot.time_list + time
+                spot_dict[f'{spot_id}']['time'] = np.array(spot.time_list) + self.initial_time
                 spot_dict[f'{spot_id}']['area'] = np.array(spot.spot_area_list)
                 spot_dict[f'{spot_id}']['latitude'] = np.array(spot.latitude_list)
                 spot_dict[f'{spot_id}']['longitude'] = np.array(spot.longitude_list)
-            # if spot_id % 100 == 0: print(f'spot_id = {spot_id}')
-        self.spot_dict = spot_dict
+            self.spot_dict = spot_dict
+        else:
+            for time in np.arange(self.initial_time, self.initial_time+total_time, time_step):
+                # Nm = self.nspots(time)
+                num_spots = np.random.poisson(0.0006)
+                # num_spots = np.random.poisson(Nm)
+                longitudes = np.random.uniform(0, 2*np.pi, num_spots)
+                latitudes = np.random.normal(self.latitude_mean, self.latitude_sigma, num_spots)
+                if num_spots < 0: continue
+                for idx in range(num_spots):
+                    spot_id = self.spot_counter()
+                    spot = Spot(latitude=latitudes[idx],
+                                longitude=longitudes[idx],
+                                spot_id=spot_id)
+                    spot.evolve(self.max_spot_area)
+                    spot_dict[f'{spot_id}'] = {}
+                    spot_dict[f'{spot_id}']['time'] = spot.time_list + time
+                    spot_dict[f'{spot_id}']['area'] = np.array(spot.spot_area_list)
+                    spot_dict[f'{spot_id}']['latitude'] = np.array(spot.latitude_list)
+                    spot_dict[f'{spot_id}']['longitude'] = np.array(spot.longitude_list)
+                # if spot_id % 100 == 0: print(f'spot_id = {spot_id}')
+            self.spot_dict = spot_dict
 
     def spot_counter(self):
         self.spot_count = self.spot_count + 1
