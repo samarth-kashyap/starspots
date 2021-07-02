@@ -322,10 +322,15 @@ class Star():
         self.sunspotnum_coeffs = sunspotnum_coeffs
         self.max_spot_area = 1e1
 
+        time_arr = np.arange(self.initial_time, self.initial_time+total_time, time_step)
+        self.time_arr = time_arr
+        self.light_curve = np.zeros_like(self.time_arr)
+
     def simulate_spots(self):
         spot_dict = {}
         spot_id = 0
         time_arr = np.arange(self.initial_time, self.initial_time+total_time, time_step)
+        spot_exists_flag = np.zeros_like(time_arr, dtype=np.bool)
 
         if self.no_evolution:
             longitudes = np.random.uniform(0, 2*np.pi, self.num_spots)
@@ -343,9 +348,10 @@ class Star():
                 spot_dict[f'{spot_id}']['area'] = np.array(spot.spot_area_list)
                 spot_dict[f'{spot_id}']['latitude'] = np.array(spot.latitude_list)
                 spot_dict[f'{spot_id}']['longitude'] = np.array(spot.longitude_list)
+                spot_dict[f'{spot_id}']['spot_exists'] = spot_exists_flag + True
             self.spot_dict = spot_dict
         else:
-            for time in np.arange(self.initial_time, self.initial_time+total_time, time_step):
+            for tidx, time in enumerate(time_arr):
                 # Nm = self.nspots(time)
                 num_spots = np.random.poisson(0.0006)
                 # num_spots = np.random.poisson(Nm)
@@ -363,10 +369,15 @@ class Star():
                     spot_dict[f'{spot_id}']['area'] = np.array(spot.spot_area_list)
                     spot_dict[f'{spot_id}']['latitude'] = np.array(spot.latitude_list)
                     spot_dict[f'{spot_id}']['longitude'] = np.array(spot.longitude_list)
+
+                    len_time = len(spot_dict[f'{spot_id}']['time'])
+                    spot_dict[f'{spot_id}']['spot_exists'] = spot_exists_flag*True
+                    spot_dict[f'{spot_id}']['spot_exists'][tidx:tidx+len_time] = True
                 # if spot_id % 100 == 0: print(f'spot_id = {spot_id}')
             self.spot_dict = spot_dict
 
     def spot_counter(self):
+        """Counter for starspots"""
         self.spot_count = self.spot_count + 1
         return self.spot_count
 
@@ -390,4 +401,41 @@ class Star():
         c1 = self.sunspotnum_coeffs['c1']
         num_spots = a1*(time - t0)**3/(np.exp((time - t0)**2/b1**2) - c1)
         return num_spots
+
+    def proj_mu(inc, theta, beta):
+        pmu = np.cos(math.radians(inc))*np.cos(math.radians(theta))+\
+            np.sin(math.radians(inc))*np.sin(math.radians(theta))*np.cos(math.radians(beta))
+        return pmu
+
+    def limb_dark(Io, mu):
+        ia = 0.5287
+        ib = 0.2175
+        Imu = Io*(1.0 - ia*(1.0 - mu) +
+                  ib*(1.0 - mu)**2)
+        return Imu
+
+    def flux_p(Io, mu, dS):
+        fp = limb_dark(Io,mu)*mu
+        return fp
+
+    def dflux_s(Io, mu, Rsun, dS):
+        if 0 <= mu <= 1:
+            fp = flux_p(Io,mu,dS)
+            fs = fp*(1.-Cs)*dS/math.pi/Rsun**2
+        else:
+            fs = 0
+        return fs
+
+    def tbstar(tspot,bspot,latspot):
+        t1 = np.cos(tspot)*np.cos(latspot)
+        t2 = np.sin(tspot)*np.cos(bspot)*np.sin(latspot)
+        tstar = math.acos(t1+t2)
+        sintstar = np.sqrt(1.-(t1+t2)**2)
+        if latspot == 0:
+            bstar = bspot
+            tstar = tspot
+        bstar = math.asin(np.sin(tspot)*np.sin(bspot)/sintstar)
+        return math.degrees(tstar),math.degrees(bstar)
+
+
 
