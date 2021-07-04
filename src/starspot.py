@@ -1,7 +1,10 @@
 import numpy as np
 
-__author__ = "Angela Santos, Samarth Kashyap"
+__author__ = "Samarth Kashyap, Angela Santos"
 __all__ = ["Spot", "Star"]
+
+
+NAX = np.newaxis
 
 Oeq = 2*np.pi/25.
 year2day = 365.25
@@ -13,6 +16,7 @@ time_step = total_time/year2day/day2hour
 cad = (1/year2day)/time_step
 gw_constant = 10.
 gw_corr_coeffs = [5., 6.2591e-3]
+initial_time = 1996.3525
 
 wr = np.array([14.713, -2.396, -1.787])
 alpha = 0.2
@@ -119,7 +123,10 @@ class Spot():
             self.latitude = self.latitude
             self.longitude = (self.longitude +
                               self.get_rotation(equator_rot_rate)*time_step) % (2*np.pi)
-            time += time_step_days
+            time += time_step
+            if time >= total_time:
+                print("time exceeded")
+                break
             latitude_list.append(self.latitude)
             longitude_list.append(self.longitude)
             spot_area_list.append(spot_area)
@@ -135,84 +142,14 @@ class Spot():
             self.latitude = self.latitude
             self.longitude = (self.longitude +
                               self.get_rotation(equator_rot_rate)*time_step) % (2*np.pi)
-            time += time_step_days
+            time += time_step
+            if time >= total_time:
+                print("time exceeded")
+                break
             latitude_list.append(self.latitude)
             longitude_list.append(self.longitude)
             spot_area_list.append(spot_area)
             time_list.append(time)
-
-        self.isevolved = True
-        self.latitude_list = latitude_list
-        self.longitude_list = longitude_list
-        self.spot_area_list = spot_area_list
-        self.time_list = time_list
-        return spot_area_list
-
-    def evolve_old(self, max_spot_area):
-        """Evolves a starspot based on the growth and decay factors.
-
-        Inputs:
-        -------
-        max_spot_area - np.float64
-            Maximum starspot area
-            Unit: MSH (Millionth of Solar Hemisphere)
-
-        Outputs:
-        --------
-        spot_area_list - list(dtype=np.float64)
-            List containing area of spot as a function of time for 
-            each time_step.
-        """
-        if self.isevolved:
-            return self.spot_area_list
-
-        self.lifetime = self.get_lifetime(max_spot_area) * year2day
-
-        latitude_list = []
-        longitude_list = []
-        spot_area_list = []
-        time_list = []
-
-        time = 0.0
-        time_step_days = self.time_step * year2day
-
-        # decay loop
-        spot_area = max_spot_area*1.0
-        spot_area_list = [spot_area]
-        for ti in np.arange(1, self.lifetime+1, self.time_step*year2day):
-            gamma1 = self.evolution_coeffs['decay']['gamma1']
-            gamma2 = self.evolution_coeffs['decay']['gamma2']
-            d_area = (np.exp(gamma1) * spot_area**gamma2)/cad
-            spot_area -= d_area
-            if spot_area < 0: break
-            self.latitude = self.latitude
-            self.longitude = (self.longitude +
-                              self.get_rotation(equator_rot_rate)*time_step) % (2*np.pi)
-            time += time_step_days
-            latitude_list.append(self.latitude)
-            longitude_list.append(self.longitude)
-            spot_area_list.append(spot_area)
-            time_list.append(time)
-
-        tg = self.lifetime - len(spot_area_list)/cad
-
-        # growth loop
-        spot_area = max_spot_area*1.0
-        for ti in np.arange(0, tg, self.time_step*year2day):
-            gamma1 = self.evolution_coeffs['growth']['gamma1']
-            gamma2 = self.evolution_coeffs['growth']['gamma2']
-            d_area = (np.exp(gamma1) * spot_area**gamma2)/cad
-            spot_area -= d_area
-            if spot_area < 0: break
-
-            self.latitude = self.latitude
-            self.longitude = (self.longitude +
-                              self.get_rotation(equator_rot_rate)*time_step) % (2*np.pi)
-            time -= time_step_days
-            latitude_list.insert(0, self.latitude)
-            longitude_list.insert(0, self.longitude)
-            spot_area_list.insert(0, spot_area)
-            time_list.insert(0, time)
 
         self.isevolved = True
         self.latitude_list = latitude_list
@@ -320,7 +257,11 @@ class Star():
         sunspotnum_coeffs['b1'] = 4.7786238
         sunspotnum_coeffs['c1'] = -0.2908343
         self.sunspotnum_coeffs = sunspotnum_coeffs
-        self.max_spot_area = 1e1
+        self.max_spot_area = 1e3
+
+        self.spotref_latnum = 10
+        self.spotref_longnum = 30
+        self.spotref_longitudes = np.linspace(0, 2*np.pi, self.spotref_longnum) - np.pi/2.0
 
         time_arr = np.arange(self.initial_time, self.initial_time+total_time, time_step)
         self.time_arr = time_arr
@@ -345,10 +286,12 @@ class Star():
                 spot.evolve(self.max_spot_area)
                 spot_dict[f'{spot_id}'] = {}
                 spot_dict[f'{spot_id}']['time'] = np.array(spot.time_list) + self.initial_time
-                spot_dict[f'{spot_id}']['area'] = np.array(spot.spot_area_list)
+                spot_dict[f'{spot_id}']['area'] = np.array(spot.spot_area_list)*1e-6*np.pi*2*rsun**2
                 spot_dict[f'{spot_id}']['latitude'] = np.array(spot.latitude_list)
-                spot_dict[f'{spot_id}']['longitude'] = np.array(spot.longitude_list)
+                spot_dict[f'{spot_id}']['longitude'] = np.array(spot.longitude_list) - np.pi/2
                 spot_dict[f'{spot_id}']['spot_exists'] = spot_exists_flag + True
+                # spot_dict[f'{spot_id}']['proj_mu'] = self.projected_mu(spot_dict[f'{spot_id}']['latitude'],
+                #                                                   spot_dict[f'{spot_id}']['longitude'])
             self.spot_dict = spot_dict
         else:
             for tidx, time in enumerate(time_arr):
@@ -366,11 +309,17 @@ class Star():
                     spot.evolve(self.max_spot_area)
                     spot_dict[f'{spot_id}'] = {}
                     spot_dict[f'{spot_id}']['time'] = spot.time_list + time
-                    spot_dict[f'{spot_id}']['area'] = np.array(spot.spot_area_list)
+                    spot_dict[f'{spot_id}']['area'] = np.array(spot.spot_area_list)*1e-6*np.pi*2*rsun**2
                     spot_dict[f'{spot_id}']['latitude'] = np.array(spot.latitude_list)
-                    spot_dict[f'{spot_id}']['longitude'] = np.array(spot.longitude_list)
+                    spot_dict[f'{spot_id}']['longitude'] = np.array(spot.longitude_list) - np.pi/2
 
+                    mask_time = spot_dict[f'{spot_id}']['time'] <= self.initial_time + total_time
                     len_time = len(spot_dict[f'{spot_id}']['time'])
+                    print(len_time)
+                    spot_dict[f'{spot_id}']['time'] = spot_dict[f'{spot_id}']['time'][mask_time]
+                    spot_dict[f'{spot_id}']['area'] = spot_dict[f'{spot_id}']['area'][mask_time]
+                    spot_dict[f'{spot_id}']['latitude'] = spot_dict[f'{spot_id}']['latitude'][mask_time]
+                    spot_dict[f'{spot_id}']['longitude'] = spot_dict[f'{spot_id}']['longitude'][mask_time]
                     spot_dict[f'{spot_id}']['spot_exists'] = spot_exists_flag*True
                     spot_dict[f'{spot_id}']['spot_exists'][tidx:tidx+len_time] = True
                 # if spot_id % 100 == 0: print(f'spot_id = {spot_id}')
@@ -402,40 +351,88 @@ class Star():
         num_spots = a1*(time - t0)**3/(np.exp((time - t0)**2/b1**2) - c1)
         return num_spots
 
-    def proj_mu(inc, theta, beta):
-        pmu = np.cos(math.radians(inc))*np.cos(math.radians(theta))+\
-            np.sin(math.radians(inc))*np.sin(math.radians(theta))*np.cos(math.radians(beta))
+    def projected_mu(self, latitude, longitude):
+        """Computes the projected mu; mu = cos(xi) where xi is the angle between
+        the light-of-sight and the normal to area element.
+        Eq(6.4) from Santos (2017) PhD. Thesis
+
+        Inputs:
+        -------
+        latitude - np.ndarray(ndim=1, dtype=np.float64)
+            colatitude of the starspot
+            Unit: radians
+        longitude - np.ndarray(ndim=1, dtype=np.float64)
+            longitude of the starspot
+            Unit: radians
+
+        Returns:
+        --------
+        pmu - np.ndarray(ndim=1, dtype=np.float64)
+            pmu = cos(xi)
+        """
+        pmu = np.cos(self.inclination)*np.cos(latitude)+\
+            np.sin(self.inclination)*np.sin(latitude)*np.cos(longitude)
         return pmu
 
-    def limb_dark(Io, mu):
+    def limb_dark(self, mu):
+        """Returns limb darkened intensity.
+
+        Inputs:
+        -------
+        mu - np.float64
+            mu = np.cos(xi); xi is the angle between normal to area element
+              and the line-of-sight vector
+
+        Returns:
+        --------
+        Imn - np.float64
+            limb darkened intensity
+        """
         ia = 0.5287
         ib = 0.2175
-        Imu = Io*(1.0 - ia*(1.0 - mu) +
-                  ib*(1.0 - mu)**2)
+        Imu = self.Io*(1.0 - ia*(1.0 - mu) +
+                       ib*(1.0 - mu)**2)
         return Imu
 
-    def flux_p(Io, mu, dS):
-        fp = limb_dark(Io,mu)*mu
+    def flux_p(self, mu):
+        fp = self.limb_dark(mu) * mu
         return fp
 
-    def dflux_s(Io, mu, Rsun, dS):
-        if 0 <= mu <= 1:
-            fp = flux_p(Io,mu,dS)
-            fs = fp*(1.-Cs)*dS/math.pi/Rsun**2
-        else:
-            fs = 0
+    def dflux_s(self, mu, area_element):
+        fp = self.flux_p(mu)
+        fs = fp * (1.0 - self.Cs) * area_element/np.pi/rsun**2
         return fs
 
-    def tbstar(tspot,bspot,latspot):
-        t1 = np.cos(tspot)*np.cos(latspot)
-        t2 = np.sin(tspot)*np.cos(bspot)*np.sin(latspot)
-        tstar = math.acos(t1+t2)
-        sintstar = np.sqrt(1.-(t1+t2)**2)
-        if latspot == 0:
-            bstar = bspot
-            tstar = tspot
-        bstar = math.asin(np.sin(tspot)*np.sin(bspot)/sintstar)
-        return math.degrees(tstar),math.degrees(bstar)
+    def convert_to_starref(self, spotref_lat, spotref_lon, starref_spotlat):
+        t1 = np.cos(spotref_lat)*np.cos(starref_spotlat)
+        t2 = np.sin(spotref_lat)*np.cos(spotref_lon)*np.sin(starref_spotlat)
+        starref_lat = np.arccos(t1+t2)
+        sintstar = np.sqrt(1.0 - (t1+t2)**2)
+        # if starref_lat == 0:
+        #     starref_long = spotref_lon
+        #     starref_lat = spotref_lat
+        starref_long = np.arcsin(np.sin(spotref_lat)*np.sin(spotref_lon)/sintstar)
+        return starref_lat, starref_long
 
-
-
+    def compute_light_curve(self):
+        for idx, spot in self.spot_dict.items():
+            areas = spot['area']
+            spot_time = spot['time']
+            start_time_idx = np.argmin(abs(self.time_arr - spot_time.min()))
+            len_time = len(spot_time)
+            print(len_time, spot_time.shape)
+            spotref_maxlats = np.arcsin(np.sqrt(areas/np.pi)/rsun)
+            spotref_lats = np.linspace(0, spotref_maxlats, self.spotref_latnum)[:, NAX, :]
+            spotref_lons = self.spotref_longitudes[NAX, :, NAX]
+            dlats = spotref_lats[1, :, :] - spotref_lats[0, :, :]
+            dlons = self.spotref_longitudes[1] - self.spotref_longitudes[0]
+            starref_lat, starref_lon = self.convert_to_starref(spotref_lats, spotref_lons,
+                                                               spot['latitude'][NAX, NAX, :])
+            proj_mu = self.projected_mu(starref_lat, starref_lon)
+            area_element = (rsun**2) * np.sin(spotref_lats) * dlons * dlats
+            flux_change = self.dflux_s(proj_mu, area_element)
+            mask_mu = (proj_mu <= 1) * (proj_mu >= 0)
+            flux_change = flux_change * mask_mu
+            self.light_curve[start_time_idx:
+                             start_time_idx+len_time] += flux_change.sum(axis=0).sum(axis=0)
+        return spotref_maxlats
