@@ -244,7 +244,8 @@ class Star():
     latitude_mean = np.radians(15.)
     latitude_sigma = np.radians(5.)
 
-    def __init__(self, inclination=90., no_evolution=False):
+    def __init__(self, inclination=90., no_evolution=False,
+                 max_spot_area=1e3):
         self.inclination = np.radians(inclination)
         self.spot_count = 0
         self.spot_dict = None
@@ -259,7 +260,7 @@ class Star():
         sunspotnum_coeffs['b1'] = 4.7786238
         sunspotnum_coeffs['c1'] = -0.2908343
         self.sunspotnum_coeffs = sunspotnum_coeffs
-        self.max_spot_area = 1e3
+        self.max_spot_area = max_spot_area
 
         self.spotref_latnum = 10
         self.spotref_longnum = 30
