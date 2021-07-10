@@ -11,7 +11,7 @@ year2day = 365.25
 day2hour = 24
 rsun = 6.955e10
 cycle_length = 11.            # years
-total_time = 1.               # years
+total_time = 4.               # years
 time_step = total_time/year2day/day2hour
 cad = (1/year2day)/time_step
 gw_constant = 10.
@@ -51,6 +51,7 @@ class Spot():
         area_logn['sigma'] = 1.0521994
         self.area_logn = area_logn
 
+        # coefficients that govern the evolution of spots
         evolution_coeffs = {}
         evolution_coeffs['growth'] = {}
         evolution_coeffs['decay'] = {}
@@ -60,6 +61,7 @@ class Spot():
         evolution_coeffs['decay']['gamma2'] = 0.2
         self.evolution_coeffs = evolution_coeffs
 
+        # coefficients to determine latitude of spots
         mean_latitude_coeffs = {}
         mean_latitude_coeffs['L0'] = 34.9987
         mean_latitude_coeffs['t0'] = 1995.1150
@@ -125,7 +127,6 @@ class Spot():
                               self.get_rotation(equator_rot_rate)*time_step) % (2*np.pi)
             time += time_step
             if time >= total_time:
-                print("time exceeded")
                 break
             latitude_list.append(self.latitude)
             longitude_list.append(self.longitude)
@@ -144,7 +145,6 @@ class Spot():
                               self.get_rotation(equator_rot_rate)*time_step) % (2*np.pi)
             time += time_step
             if time >= total_time:
-                print("time exceeded")
                 break
             latitude_list.append(self.latitude)
             longitude_list.append(self.longitude)
@@ -242,7 +242,7 @@ class Star():
     latitude_mean = np.radians(15.)
     latitude_sigma = np.radians(5.)
 
-    def __init__(self, inclination=70., no_evolution=False):
+    def __init__(self, inclination=90., no_evolution=False):
         self.inclination = np.radians(inclination)
         self.spot_count = 0
         self.spot_dict = None
@@ -274,8 +274,14 @@ class Star():
         spot_exists_flag = np.zeros_like(time_arr, dtype=np.bool)
 
         if self.no_evolution:
-            longitudes = np.random.uniform(0, 2*np.pi, self.num_spots)
-            latitudes = np.random.normal(self.latitude_mean, self.latitude_sigma, self.num_spots)
+            # longitudes = np.random.uniform(0, 2*np.pi, self.num_spots)
+            # latitudes = np.random.normal(self.latitude_mean,
+            #                              self.latitude_sigma,
+            #                              self.num_spots)
+            longitudes = np.linspace(0, 2*np.pi, self.num_spots)
+            latitudes = np.linspace(self.latitude_mean - self.latitude_sigma,
+                                    self.latitude_mean + self.latitude_sigma,
+                                    self.num_spots)
             for idx in range(self.num_spots):
                 spot_id = self.spot_counter()
                 spot = Spot(latitude=latitudes[idx],
@@ -290,8 +296,6 @@ class Star():
                 spot_dict[f'{spot_id}']['latitude'] = np.array(spot.latitude_list)
                 spot_dict[f'{spot_id}']['longitude'] = np.array(spot.longitude_list) - np.pi/2
                 spot_dict[f'{spot_id}']['spot_exists'] = spot_exists_flag + True
-                # spot_dict[f'{spot_id}']['proj_mu'] = self.projected_mu(spot_dict[f'{spot_id}']['latitude'],
-                #                                                   spot_dict[f'{spot_id}']['longitude'])
             self.spot_dict = spot_dict
         else:
             for tidx, time in enumerate(time_arr):
@@ -315,7 +319,6 @@ class Star():
 
                     mask_time = spot_dict[f'{spot_id}']['time'] <= self.initial_time + total_time
                     len_time = len(spot_dict[f'{spot_id}']['time'])
-                    print(len_time)
                     spot_dict[f'{spot_id}']['time'] = spot_dict[f'{spot_id}']['time'][mask_time]
                     spot_dict[f'{spot_id}']['area'] = spot_dict[f'{spot_id}']['area'][mask_time]
                     spot_dict[f'{spot_id}']['latitude'] = spot_dict[f'{spot_id}']['latitude'][mask_time]
@@ -420,14 +423,19 @@ class Star():
             spot_time = spot['time']
             start_time_idx = np.argmin(abs(self.time_arr - spot_time.min()))
             len_time = len(spot_time)
-            print(len_time, spot_time.shape)
             spotref_maxlats = np.arcsin(np.sqrt(areas/np.pi)/rsun)
+
+            # lat X lon X time
             spotref_lats = np.linspace(0, spotref_maxlats, self.spotref_latnum)[:, NAX, :]
             spotref_lons = self.spotref_longitudes[NAX, :, NAX]
-            dlats = spotref_lats[1, :, :] - spotref_lats[0, :, :]
+
+            dlats = spotref_lats[1, 0, :] - spotref_lats[0, 0, :]
             dlons = self.spotref_longitudes[1] - self.spotref_longitudes[0]
+
+            dlats = dlats[NAX, NAX, :]
             starref_lat, starref_lon = self.convert_to_starref(spotref_lats, spotref_lons,
                                                                spot['latitude'][NAX, NAX, :])
+            starref_lon += spot['longitude'][NAX, NAX, :]
             proj_mu = self.projected_mu(starref_lat, starref_lon)
             area_element = (rsun**2) * np.sin(spotref_lats) * dlons * dlats
             flux_change = self.dflux_s(proj_mu, area_element)
@@ -436,3 +444,15 @@ class Star():
             self.light_curve[start_time_idx:
                              start_time_idx+len_time] += flux_change.sum(axis=0).sum(axis=0)
         return spotref_maxlats
+
+    def compute_fft(self, data, time):
+        fft_data = np.fft.fft(data)
+        fft_freq = np.fft.fftfreq(len(data), d=time[1]-time[0])
+        pow_data = abs(fft_data)**2
+        mask_pos = fft_freq > 0
+        fft_freq = fft_freq[mask_pos]
+        pow_data = pow_data[mask_pos]
+        pow_data /= pow_data.max()
+        return pow_data, fft_freq
+
+
