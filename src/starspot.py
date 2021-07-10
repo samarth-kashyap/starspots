@@ -1,12 +1,14 @@
 import numpy as np
+from params import starParams
 
 __author__ = "Samarth Kashyap, Angela Santos"
 __all__ = ["Spot", "Star"]
 
+sp = starParams(type='star')
+
 
 NAX = np.newaxis
 
-Oeq = 2*np.pi/25.
 year2day = 365.25
 day2hour = 24
 rsun = 6.955e10
@@ -22,7 +24,7 @@ wr = np.array([14.713, -2.396, -1.787])
 alpha = 0.2
 
 equator_rot_rate = 2*np.pi/25.
-const = Oeq*alpha*np.sin(np.radians(90.))**2
+const = equator_rot_rate*alpha*np.sin(np.radians(90.))**2
 wr2 = [alpha, equator_rot_rate*year2day]
 
 
