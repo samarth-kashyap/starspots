@@ -38,7 +38,7 @@ class Spot():
                  spot_id=0, no_evolution=False,
                  len_time=None, total_time=1.0,
                  time_step=1.0/year2day/day2hour,
-                 prot=25.):
+                 prot=25., alpha=0.2):
         self.time_step = time_step
         self.latitude = latitude
         self.longitude = longitude
@@ -85,7 +85,7 @@ class Spot():
 
         self.equator_rot_rate = 2*np.pi/prot
         self.const = self.equator_rot_rate*alpha*np.sin(np.radians(90.))**2
-        self.wr2 = [alpha, self.equator_rot_rate*year2day]
+        self.alpha = alpha
 
     def evolve(self, max_spot_area):
         """Evolves a starspot based on the growth and decay factors.
@@ -231,7 +231,7 @@ class Spot():
         -------
         Rotation rate at the starspot latitude
         """
-        return equator_rot_rate*(1. - self.wr2[0]*np.sin(self.latitude)**2)*year2day
+        return equator_rot_rate*(1. - self.alpha*np.sin(self.latitude)**2)*year2day
 
 
 class Star():
@@ -411,7 +411,7 @@ class Star():
 
         Returns:
         --------
-        Imn - np.float64
+        Imu - np.float64
             limb darkened intensity
         """
         ia = 0.5287

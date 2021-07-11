@@ -49,7 +49,7 @@ class twoSpotStar():
                  time_step=1.0/year2day/day2hour,
                  lat1=np.radians(15.), lat2=np.radians(105.),
                  lon1=np.radians(-45.), lon2=np.radians(106.),
-                 prot=25.):
+                 prot=25., alpha=0.2):
         self.Io = Io
         self.inclination = np.radians(inclination)
         self.spot_count = 0
@@ -90,6 +90,7 @@ class twoSpotStar():
         self.light_curve = np.zeros_like(self.time_arr)
         self.len_time = len(time_arr)
         self.prot = prot
+        self.alpha = alpha
 
     def simulate_spots(self):
         spot_dict = {}
@@ -115,7 +116,7 @@ class twoSpotStar():
                             len_time=len(time_arr),
                             total_time=self.total_time,
                             time_step=self.time_step,
-                            prot=self.prot)
+                            prot=self.prot, alpha=self.alpha)
                 spot.evolve(self.max_spot_areas[idx])
                 spot_dict[f'{spot_id}'] = {}
                 spot_dict[f'{spot_id}']['time'] = np.array(spot.time_list) + self.initial_time
