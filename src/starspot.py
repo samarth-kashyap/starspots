@@ -18,11 +18,8 @@ gw_corr_coeffs = [5., 6.2591e-3]
 initial_time = 1996.3525
 
 wr = np.array([14.713, -2.396, -1.787])
-alpha = 0.2
+alpha = 1.9
 
-equator_rot_rate = 2*np.pi/25.
-const = equator_rot_rate*alpha*np.sin(np.radians(90.))**2
-wr2 = [alpha, equator_rot_rate*year2day]
 
 
 class Spot():
@@ -39,8 +36,10 @@ class Spot():
                  latitude=np.radians(90.),
                  longitude=np.radians(45.),
                  spot_id=0, no_evolution=False,
-                 len_time=None, total_time=1.0):
-        self.time_step = total_time/year2day/day2hour
+                 len_time=None, total_time=1.0,
+                 time_step=1.0/year2day/day2hour,
+                 prot=25.):
+        self.time_step = time_step
         self.latitude = latitude
         self.longitude = longitude
         self.spot_id = int(spot_id)
@@ -84,6 +83,10 @@ class Spot():
         self.no_evolution = no_evolution
         self.len_time = len_time
 
+        self.equator_rot_rate = 2*np.pi/prot
+        self.const = self.equator_rot_rate*alpha*np.sin(np.radians(90.))**2
+        self.wr2 = [alpha, self.equator_rot_rate*year2day]
+
     def evolve(self, max_spot_area):
         """Evolves a starspot based on the growth and decay factors.
 
@@ -125,10 +128,10 @@ class Spot():
             if spot_area > max_spot_area: break
             self.latitude = self.latitude
             self.longitude = ((self.longitude +
-                              self.get_rotation(equator_rot_rate)*self.time_step) %
+                              self.get_rotation(self.equator_rot_rate)*self.time_step) %
                               (2*np.pi))
             time += self.time_step
-            if time >= total_time:
+            if time >= self.total_time:
                 break
             latitude_list.append(self.latitude)
             longitude_list.append(self.longitude)
@@ -144,9 +147,9 @@ class Spot():
             if spot_area < 0: break
             self.latitude = self.latitude
             self.longitude = (self.longitude +
-                              self.get_rotation(equator_rot_rate)*self.time_step) % (2*np.pi)
+                              self.get_rotation(self.equator_rot_rate)*self.time_step) % (2*np.pi)
             time += self.time_step
-            if time >= total_time:
+            if time >= self.total_time:
                 break
             latitude_list.append(self.latitude)
             longitude_list.append(self.longitude)
@@ -176,7 +179,8 @@ class Spot():
 
         for idx in range(self.len_time):
             self.longitude = (self.longitude +
-                              self.get_rotation(equator_rot_rate)*self.time_step) % (2*np.pi)
+                              (self.get_rotation(self.equator_rot_rate)
+                               *self.time_step)) % (2*np.pi)
             time_list.append(idx*self.time_step)
             longitude_list.append(self.longitude)
             latitude_list.append(self.latitude)
@@ -227,7 +231,7 @@ class Spot():
         -------
         Rotation rate at the starspot latitude
         """
-        return equator_rot_rate*(1. - wr2[0]*np.sin(self.latitude)**2)*year2day
+        return equator_rot_rate*(1. - self.wr2[0]*np.sin(self.latitude)**2)*year2day
 
 
 class Star():
@@ -412,9 +416,8 @@ class Star():
         """
         ia = 0.5287
         ib = 0.2175
-        Imu = self.Io*(1.0 - ia*(1.0 - mu) +
-                       ib*(1.0 - mu)**2)
-        return Imu
+        Imu_by_I1 = (1.0 - ia*(1.0 - mu) + ib*(1.0 - mu)**2)
+        return Imu_by_I1
 
     def flux_p(self, mu):
         fp = self.limb_dark(mu) * mu

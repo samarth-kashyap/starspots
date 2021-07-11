@@ -48,7 +48,8 @@ class twoSpotStar():
                  total_time=1.0, time_arr=None,
                  time_step=1.0/year2day/day2hour,
                  lat1=np.radians(15.), lat2=np.radians(105.),
-                 lon1=np.radians(-45.), lon2=np.radians(106.)):
+                 lon1=np.radians(-45.), lon2=np.radians(106.),
+                 prot=25.):
         self.Io = Io
         self.inclination = np.radians(inclination)
         self.spot_count = 0
@@ -72,24 +73,34 @@ class twoSpotStar():
         sunspotnum_coeffs['b1'] = 4.7786238
         sunspotnum_coeffs['c1'] = -0.2908343
         self.sunspotnum_coeffs = sunspotnum_coeffs
-        self.max_spot_area = max_spot_area
 
         self.spotref_latnum = 10
         self.spotref_longnum = 30
         self.spotref_longitudes = np.linspace(0, 2*np.pi, self.spotref_longnum) - np.pi/2.0
 
-        time_arr = np.arange(self.initial_time,
-                             self.initial_time+self.total_time,
-                             self.time_step)
-        self.time_arr = time_arr
+        # time_arr = np.arange(self.initial_time,
+        #                      self.initial_time+self.total_time,
+        #                      self.time_step)
+        if time_arr is not None:
+            self.time_arr = time_arr
+        else:
+            time_arr = np.arange(self.initial_time,
+                                self.initial_time+self.total_time,
+                                self.time_step)
         self.light_curve = np.zeros_like(self.time_arr)
+        self.len_time = len(time_arr)
+        self.prot = prot
 
     def simulate_spots(self):
         spot_dict = {}
         spot_id = 0
-        time_arr = np.arange(self.initial_time,
-                             self.initial_time+self.total_time,
-                             self.time_step)
+        # time_arr = np.arange(self.initial_time,
+        #                      self.initial_time+self.total_time,
+        #                      self.time_step)
+
+        time_arr = np.linspace(self.initial_time,
+                               self.initial_time+self.total_time,
+                               self.len_time)
         spot_exists_flag = np.zeros_like(time_arr, dtype=np.bool)
 
         if self.no_evolution:
@@ -101,7 +112,10 @@ class twoSpotStar():
                             longitude=longitudes[idx],
                             spot_id=spot_id,
                             no_evolution=True,
-                            len_time=len(time_arr))
+                            len_time=len(time_arr),
+                            total_time=self.total_time,
+                            time_step=self.time_step,
+                            prot=self.prot)
                 spot.evolve(self.max_spot_areas[idx])
                 spot_dict[f'{spot_id}'] = {}
                 spot_dict[f'{spot_id}']['time'] = np.array(spot.time_list) + self.initial_time
@@ -123,7 +137,7 @@ class twoSpotStar():
                     spot = Spot(latitude=latitudes[idx],
                                 longitude=longitudes[idx],
                                 spot_id=spot_id)
-                    spot.evolve(self.max_spot_area)
+                    spot.evolve(self.max_spot_areas[idx])
                     spot_dict[f'{spot_id}'] = {}
                     spot_dict[f'{spot_id}']['time'] = spot.time_list + time
                     spot_dict[f'{spot_id}']['area'] = np.array(spot.spot_area_list)*1e-6*np.pi*2*rsun**2
@@ -207,8 +221,7 @@ class twoSpotStar():
         """
         ia = 0.5287
         ib = 0.2175
-        Imu = self.Io*(1.0 - ia*(1.0 - mu) +
-                       ib*(1.0 - mu)**2)
+        Imu = self.Io*(1.0 - ia*(1.0 - mu) + ib*(1.0 - mu)**2)
         return Imu
 
     def flux_p(self, mu):
@@ -217,8 +230,8 @@ class twoSpotStar():
 
     def dflux_s(self, mu, area_element):
         fp = self.flux_p(mu)
-        # fs = fp * (1.0 - self.Cs) * area_element/np.pi/rsun**2
-        fs = fp * (- self.Cs) * area_element/np.pi/rsun**2
+        fs = fp * (1.0 - self.Cs) * area_element/np.pi/rsun**2
+        # fs = fp * (- self.Cs) * area_element/np.pi/rsun**2
         return fs
 
     def convert_to_starref(self, spotref_lat, spotref_lon, starref_spotlat):

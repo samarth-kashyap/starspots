@@ -13,18 +13,22 @@ p_rot = 2.57
 LC = SC.lightCurve(KIC=KIC, p_rot=p_rot)
 lc_data = LC.data
 lc_time = LC.daynum
-lc_time -= lc_time[0]
 
-max_time_idx = np.argmin(abs(lc_time) - 5*p_rot)
+max_time_idx = np.argmin(abs(lc_time - 5*p_rot))
 lc_data = lc_data[:max_time_idx]
 lc_time = lc_time[:max_time_idx]
+time_step = (lc_time[1] - lc_time[0])/365.25
 
 def log_likelihood(theta, x, y):
     area, inclination = theta
     star = ST(inclination=inclination,
               no_evolution=True,
               max_area1=area,
-              Io=np.mean(lc_data))
+              Io=abs(lc_data).max(),
+              total_time=lc_time[-1]/365.25,
+              time_step=time_step,
+              time_arr=lc_time/365.25,
+              prot=p_rot)
     star.simulate_spots()
     star.compute_light_curve()
     model = star.light_curve
@@ -34,7 +38,8 @@ def log_likelihood(theta, x, y):
 
 def log_prior(theta):
     area, inclination = theta
-    if (1e1 < area < 1e4) and (0.0 < inclination < 10.0):
+    # if (1e1 < area < 1e6) and (0.0 < inclination < 90.0):
+    if (1e-3 < area < 1e2) and (0.0 < inclination < 90.0):
         return 0.0
     return -np.inf
 
@@ -45,20 +50,20 @@ def log_probability(theta, x, y):
     return lp + log_likelihood(theta, x, y)
 
 
-_star = ST(inclination=5., no_evolution=True, max_spot_area=1e3)
-_star.simulate_spots()
-_star.compute_light_curve()
-time = _star.time_arr*1.0
-lc_observed = _star.light_curve*1.0
-del _star
+# _star = ST(inclination=5., no_evolution=True, max_area1=1e3)
+# _star.simulate_spots()
+# _star.compute_light_curve()
+# time = _star.time_arr*1.0
+# lc_observed = _star.light_curve*1.0
+# del _star
 
-pos = [0.9e3, 5] + 1e-1*np.random.randn(5, 2)
+pos = [0.9e1, 5] + 1e-1*np.random.randn(5, 2)
 nwalkers, ndim = pos.shape
 
 
 with Pool() as pool:
     sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, pool=pool,
-                                    args=(time, lc_observed))
+                                    args=(lc_time, lc_data))
     sampler.run_mcmc(pos, 500, progress=True)
 
 fig, axes = plt.subplots(3, figsize=(10, 7), sharex=True)
@@ -76,4 +81,4 @@ axes[-1].set_xlabel("step number");
 flat_samples = sampler.get_chain(discard=100, thin=15, flat=True)
 print(flat_samples.shape)
 
-fig = corner.corner(flat_samples, labels=labels, truths=[1e3, 5.])
+fig = corner.corner(flat_samples, labels=labels) #, truths=[1e3, 5.])
