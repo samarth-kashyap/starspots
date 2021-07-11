@@ -13,7 +13,7 @@ year2day = 365.25
 day2hour = 24
 rsun = 6.955e10
 cycle_length = 11.            # years
-total_time = 4.               # years
+total_time = 1.               # years
 time_step = total_time/year2day/day2hour
 cad = (1/year2day)/time_step
 gw_constant = 10.
@@ -231,7 +231,6 @@ class Spot():
 
 
 class Star():
-    Io = 1.
     Cs = 0.67
 
     nbeta = 90
@@ -245,7 +244,8 @@ class Star():
     latitude_sigma = np.radians(5.)
 
     def __init__(self, inclination=90., no_evolution=False,
-                 max_spot_area=1e3):
+                 max_spot_area=1e3, Io=1.):
+        self.Io = Io
         self.inclination = np.radians(inclination)
         self.spot_count = 0
         self.spot_dict = None
