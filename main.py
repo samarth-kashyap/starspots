@@ -1,10 +1,23 @@
 import numpy as np
 from starspot import Star as ST
 from starspot import Spot as SP
+import starCycle as SC
 from multiprocessing import Pool
 import matplotlib.pyplot as plt
 import emcee
 import corner
+
+
+KIC = 3733735
+p_rot = 2.57
+LC = SC.lightCurve(KIC=KIC, p_rot=p_rot)
+lc_data = LC.data
+lc_time = LC.daynum
+lc_time -= lc_time[0]
+
+max_time_idx = np.argmin(abs(lc_time) - 5*p_rot)
+lc_data = lc_data[:max_time_idx]
+lc_time = lc_time[:max_time_idx]
 
 def log_likelihood(theta, x, y):
     area, inclination = theta
