@@ -1,6 +1,6 @@
 import numpy as np
-from starspot import Star as ST
 from starspot import Spot as SP
+from twospot import twoSpotStar as ST
 import starCycle as SC
 from multiprocessing import Pool
 import matplotlib.pyplot as plt
@@ -23,7 +23,8 @@ def log_likelihood(theta, x, y):
     area, inclination = theta
     star = ST(inclination=inclination,
               no_evolution=True,
-              max_spot_area=area)
+              max_area1=area,
+              Io=np.mean(lc_data))
     star.simulate_spots()
     star.compute_light_curve()
     model = star.light_curve
